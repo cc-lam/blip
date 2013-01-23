@@ -1,0 +1,19 @@
+{
+  "name": "blip",
+  "author": "Damian Bushong <katana@codebite.net>",
+  "description": "Become just another blip on the radar",
+  "version": "0.0.0",
+  "homepage": "https://github.com/damianb/blip",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/damianb/blip.git"
+  },
+  "main": "./blip.js",
+  "devDependencies": {},
+  "dependencies": {
+    "node-gd": "0.2.x"
+  },
+  "engines": {
+    "node": ">=0.8.x"
+  }
+}

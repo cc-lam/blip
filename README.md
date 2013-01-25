@@ -13,7 +13,7 @@ Current usage of the API is fairly straightforward.
 
 ``` js
 
-var blip = require('./blip'),
+var blip = require('blip'),
 	fs = require('fs')
 
 // writing data to an image...

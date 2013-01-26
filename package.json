@@ -11,7 +11,8 @@
   "main": "./blip.js",
   "devDependencies": {},
   "dependencies": {
-    "node-gd": "0.2.x"
+    "node-gd": "0.2.x",
+    "commander":"1.1.x"
   },
   "engines": {
     "node": ">=0.8.x"

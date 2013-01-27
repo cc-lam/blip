@@ -1,0 +1,194 @@
+#!/usr/bin/env node
+
+var blip = require('./../lib/blip'),
+	pkg = require('./../package.json'),
+	app = require('commander'),
+	fs = require('fs')
+
+function list(val) {
+	return val.split(',')
+}
+
+function crit(msg) {
+	console.error(msg)
+	process.exit(1)
+}
+
+app
+	.version('blip ' + pkg.version)
+	.option('-v, --verbose', 'give verbose error messages')
+
+app
+	.command('read [file]')
+	.description('retrieves data from an image (both as embedded data or as a whole image)')
+	.option('-o, --out <file>', 'where to store data retrieved from [file]')
+	.option('-p, --points <list>', 'list of four points to use for reading embedded data, formatted as follows: x1,x2,y1,y2', list)
+	.option('-v, --verbose', 'give verbose error messages')
+	.action(function(file, options) {
+		try {
+			if(options.points.length != 4)
+				throw new Error('embed points must contain 4 integer points, specified with format x1,x2,y1,y2 (comma separated)')
+
+			var time = new Date().getTime(), out = options.out || false,
+				blipRead = function(err, res) {
+					if(options.verbose) {
+						throw err
+					} else {
+						crit(err.toString())
+					}
+					console.log('blip: data successfully decoded, took %ss', (new Date().getTime() - time) / 1000)
+					if(!out) {
+						console.log('blip: data follows:')
+						console.log(res)
+					} else {
+						fs.writeFileSync(out, res)
+						console.log('blip: data written to file "%s"')
+					}
+					process.exit(0)
+				}
+
+
+			if(options.points) {
+				var x1, x2, y1, y2
+				x1 = parseInt(options.points[0]), x2 = parseInt(options.points[1])
+				y1 = parseInt(options.points[2]), y2 = parseInt(options.points[3])
+				blip.fromImageEmbed(file, x1, x2, y1, y2, blipRead)
+			} else {
+				blip.fromImage(file, blipRead)
+			}
+		} catch(err) {
+			if(options.verbose) {
+				throw err
+			} else {
+				crit(err.toString())
+			}
+		}
+	})
+
+app
+	.command('embed [file]')
+	.description('embeds given data within an already existing image')
+	.option('-f, --file <file>', 'embed the specified file\'s contents into [file] (cannot be used with --string)')
+	.option('-s, --string', 'prompt for the data to embed into [file] (cannot be used with --file)')
+	.option('-o, --out <outfile>', 'do not overwrite original image, write modified image to <outfile> instead')
+	.option('-p, --points <list>', 'list of four points to use for reading embedded data, formatted as follows: x1,x2,y1,y2', list)
+	.option('-v, --verbose', 'give verbose error messages')
+	.action(function(file, options) {
+		try {
+			if(!options.points)
+				throw new Error('embed points must be provided')
+
+			if(options.file && options.string)
+				throw new Error('cannot use --file and --string flags simultaneously')
+
+			if(!options.file && !options.string)
+				throw new Error('either --file <file> or --string flag must be provided for input')
+
+			if(options.points.length != 4)
+				throw new Error('--points must provide 4 integer points, specified with format x1,x2,y1,y2 (comma separated)')
+
+			function blipEmbed(input) {
+				var time = new Date().getTime(), out = options.out || file, x1, x2, y1, y2
+				x1 = parseInt(options.points[0]), x2 = parseInt(options.points[1])
+				y1 = parseInt(options.points[2]), y2 = parseInt(options.points[3])
+				blip.toImageEmbed(file, input, x1, x2, y1, y2, out, function(err, dest) {
+					if(options.verbose) {
+						throw err
+					} else {
+						crit(err.toString())
+					}
+					console.log('blip: data successfully encoded and written to "%s", took %ss', dest, (new Date().getTime() - time) / 1000)
+					process.exit(0)
+				})
+			}
+
+			if(options.string) {
+				app.prompt('data to write: \n> ', blipEmbed)
+			} else {
+				blipEmbed(fs.readFileSync(options.file))
+			}
+		} catch(err) {
+			if(options.verbose) {
+				throw err
+			} else {
+				crit(err.toString())
+			}
+		}
+	})
+	.on('--help', function() {
+		console.log('  (note: --points x1,x2,x3,x4 is required for embed, along with either --file or --string for input)')
+	})
+
+app
+	.command('write [file]')
+	.description('writes given data into a new image, ignoring prior contents')
+	.option('-f, --file <file>', 'embed the specified file\'s contents into [file] (cannot be used with --string)')
+	.option('-s, --string', 'prompt for the data to embed into [file] (cannot be used with --file)')
+	.option('-w, --width <size>', 'width to use for the content written to the new image')
+	.option('-v, --verbose', 'give verbose error messages')
+	.action(function(file, options) {
+		try {
+			if(!options.width)
+				throw new Error('image width must be provided')
+
+			if(options.file && options.string)
+				throw new Error('cannot use --file and --string flags simultaneously')
+
+			if(!options.file && !options.string)
+				throw new Error('either --file <file> or --string flag must be provided for input')
+
+			function blipWrite(input) {
+				var time = new Date().getTime()
+				blip.toImage(input, parseInt(options.width), file, function(err, dest) {
+					if(options.verbose) {
+						throw err
+					} else {
+						crit(err.toString())
+					}
+					console.log('blip: data successfully encoded and written to "%s", took %ss', dest, (new Date().getTime() - time) / 1000)
+					process.exit(0)
+				})
+			}
+
+			if(options.string) {
+				app.prompt('data to write: \n> ', blipWrite)
+			} else {
+				blipWrite(fs.readFileSync(options.file))
+			}
+		} catch(err) {
+			if(options.verbose) {
+				throw err
+			} else {
+				crit(err.toString())
+			}
+		}
+	})
+	.on('--help', function() {
+		console.log('  (note: either --file <file> or --string must be specified for input)')
+	})
+
+app
+	.command('dim [file]')
+	.description('retrieve the number of pixels present within [file]')
+	.option('-v, --verbose', 'give verbose error messages')
+	.action(function(file, options) {
+		// asdf
+	})
+
+app
+	.command('filepx [file]')
+	.description('determine the number of pixels required to store data within [file]')
+	.option('-v, --verbose', 'give verbose error messages')
+	.action(function(file, options) {
+		// asdf
+	})
+
+app
+	.command('strpx')
+	.description('prompt for a string and determine the number of pixels required to store its contents')
+	.option('-v, --verbose', 'give verbose error messages')
+	.action(function(file, options) {
+		// asdf
+	})
+
+app.parse(process.argv)

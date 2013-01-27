@@ -9,6 +9,7 @@
     "url": "git://github.com/damianb/blip.git"
   },
   "main": "./blip.js",
+  "bin": { "blip": "./bin/blip" },
   "devDependencies": {},
   "dependencies": {
     "node-gd": "0.2.x",

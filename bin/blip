@@ -178,7 +178,25 @@ app
 	.description('retrieve the number of pixels present within [file]')
 	.option('-v, --verbose', 'give verbose error messages')
 	.action(function(file, options) {
-		// asdf
+		try {
+			blip.imageSize(file, function(err, width, height) {
+				if(err) {
+					if(options.verbose) {
+						throw err
+					} else {
+						crit(err.toString())
+					}
+				}
+				console.log('blip: image is %spx by %spx, providing %s pixels of area', width, height, width * height)
+				process.exit(0)
+			})
+		} catch(err) {
+			if(options.verbose) {
+				throw err
+			} else {
+				crit(err.toString())
+			}
+		}
 	})
 
 app
@@ -186,15 +204,53 @@ app
 	.description('determine the number of pixels required to store data within [file]')
 	.option('-v, --verbose', 'give verbose error messages')
 	.action(function(file, options) {
-		// asdf
+		try {
+			blip.dataSize(fs.readFileSync(file), function(err, size) {
+				if(err) {
+					if(options.verbose) {
+						throw err
+					} else {
+						crit(err.toString())
+					}
+				}
+				console.log('blip: provided data requires %s pixels for storage', size)
+				process.exit(0)
+			})
+		} catch(err) {
+			if(options.verbose) {
+				throw err
+			} else {
+				crit(err.toString())
+			}
+		}
 	})
 
 app
 	.command('strpx')
 	.description('prompt for a string and determine the number of pixels required to store its contents')
 	.option('-v, --verbose', 'give verbose error messages')
-	.action(function(file, options) {
-		// asdf
+	.action(function(options) {
+		try {
+			app.prompt('data to measure: \n> ', function(input) {
+				blip.dataSize(input, function(err, size) {
+					if(err) {
+						if(options.verbose) {
+							throw err
+						} else {
+							crit(err.toString())
+						}
+					}
+					console.log('blip: provided data requires %s pixels for storage', size)
+					process.exit(0)
+				})
+			})
+		} catch(err) {
+			if(options.verbose) {
+				throw err
+			} else {
+				crit(err.toString())
+			}
+		}
 	})
 
 app

@@ -37,6 +37,7 @@ No true initialization is required - include and go. Seriously.
 		* **fn(err, dest)**
 		* $err - null if no error, or Error object if something went wrong
 		* $dest - undefined if error, or string containing the file's destination
+	* **Note**: this function is intended to write pixel data in typical LTR fashion, left to write, then top to bottom.
 
  * **blip.fromImage(image, fn)**
 	* *read data out from a complete image*
@@ -57,6 +58,8 @@ No true initialization is required - include and go. Seriously.
 		* **fn(err, res)**
 		* $err - null if no error, or Error object if something went wrong
 		* $res - undefined if error, or string if decode successful
+	* **Note**: this function is intended to read pixel data in typical LTR fashion, left to write, then top to bottom.
+
 
  * **blip.imageSize(image, fn)**
 	* *get specified image's dimensions (for determining maximum pixel area we have to work with)*

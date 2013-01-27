@@ -2,7 +2,7 @@
   "name": "blip",
   "author": "Damian Bushong <katana@codebite.net>",
   "description": "Become just another blip on the radar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "homepage": "https://github.com/damianb/blip",
   "repository": {
     "type": "git",

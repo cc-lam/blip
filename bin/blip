@@ -26,15 +26,17 @@ app
 	.option('-v, --verbose', 'give verbose error messages')
 	.action(function(file, options) {
 		try {
-			if(options.points.length != 4)
+			if(options.points && options.points.length != 4)
 				throw new Error('embed points must contain 4 integer points, specified with format x1,x2,y1,y2 (comma separated)')
 
 			var time = new Date().getTime(), out = options.out || false,
 				blipRead = function(err, res) {
-					if(options.verbose) {
-						throw err
-					} else {
-						crit(err.toString())
+					if(err) {
+						if(options.verbose) {
+							throw err
+						} else {
+							crit(err.toString())
+						}
 					}
 					console.log('blip: data successfully decoded, took %ss', (new Date().getTime() - time) / 1000)
 					if(!out) {
@@ -92,10 +94,12 @@ app
 				x1 = parseInt(options.points[0]), x2 = parseInt(options.points[1])
 				y1 = parseInt(options.points[2]), y2 = parseInt(options.points[3])
 				blip.toImageEmbed(file, input, x1, x2, y1, y2, out, function(err, dest) {
-					if(options.verbose) {
-						throw err
-					} else {
-						crit(err.toString())
+					if(err) {
+						if(options.verbose) {
+							throw err
+						} else {
+							crit(err.toString())
+						}
 					}
 					console.log('blip: data successfully encoded and written to "%s", took %ss', dest, (new Date().getTime() - time) / 1000)
 					process.exit(0)
@@ -140,10 +144,12 @@ app
 			function blipWrite(input) {
 				var time = new Date().getTime()
 				blip.toImage(input, parseInt(options.width), file, function(err, dest) {
-					if(options.verbose) {
-						throw err
-					} else {
-						crit(err.toString())
+					if(err) {
+						if(options.verbose) {
+							throw err
+						} else {
+							crit(err.toString())
+						}
 					}
 					console.log('blip: data successfully encoded and written to "%s", took %ss', dest, (new Date().getTime() - time) / 1000)
 					process.exit(0)
@@ -189,6 +195,13 @@ app
 	.option('-v, --verbose', 'give verbose error messages')
 	.action(function(file, options) {
 		// asdf
+	})
+
+app
+	.command('*')
+	.action(function(env){
+		app.help()
+		process.exit(0)
 	})
 
 app.parse(process.argv)

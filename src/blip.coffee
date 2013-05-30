@@ -3,8 +3,8 @@ fs = require 'fs'
 os = require 'os'
 util = require 'util'
 zlib = require 'zlib'
+domain = require 'domain'
 gd = require 'node-gd'
-blip = {}
 
 hexNum = (val) ->
 	val = val.toString 16
@@ -80,7 +80,7 @@ class encoder extends EventEmitter
 		else if @profileBytes['R'] is encoder.bytes.WRITEXOR
 			# set to true for now to indicate we ARE looking for an xor byte
 			@xorByte = true
-	
+
 		if @profileBytes['G'] is encoder.bytes.PRESERVE and (@xorByte is true or @xorByte is false)
 			# only set xor byte if we don't have one already
 			@xorByte = 'G'
@@ -119,75 +119,143 @@ class encoder extends EventEmitter
  * @access private
 	###
 	__encode: (input, fn) ->
-		gzip = zlib.createGzip @gzipOptions
-		if input.readable? is false
-			throw new TypeError 'readable stream required for __encode, non-readable stream provided'
-		else
-			tmpFile = fs.createWriteStream @tmpFile, { encoding: 'utf8' }
-			gzip.on 'close', () =>
-				# create tmp file...
-				tmpFile = fs.createReadStream @tmpFile, { encoding: 'utf8' }
-				totalBytes = fs.statSync(@tmpFile).size
-
-				# Returning a special function that will allow us to take a chunk at a time for rendering into each pixel.
-				# Hopefully, this should decrease memory use.
-				fn null, totalBytes, (chunkSize) =>
-					chunk = new Buffer(tmpFile.read(chunkSize or 3), 'utf8').toString('hex')
-					tbuffer = null
-					if chunk is null then return null
-					if chunk.length % 6 isnt 0
-						tBuffer = new Buffer chunk.length % 6
-						tBuffer.fill ' '
-						chunk = Buffer.concat [chunk, tBuffer]
-					return chunk
-				, tmpFile
-
-			if input.readable?
-				input.pipe(gzip).pipe(tmpFile)
+		d = domain.create()
+		d.on 'error', (err) ->
+			# abort!
+			fn err
+		d.run () ->
+			gzip = zlib.createGzip @gzipOptions
+			if input.readable? is false
+				throw new TypeError 'readable stream required for __encode, non-readable stream provided'
 			else
-				gzip.pipe tmpFile
-				gzip.write new Buffer(input, 'utf8')
+				tmpFile = fs.createWriteStream @tmpFile, { encoding: 'utf8' }
+				gzip.on 'close', () =>
+					# create tmp file...
+					tmpFile = fs.createReadStream @tmpFile, { encoding: 'utf8' }
+					totalBytes = fs.statSync(@tmpFile).size
 
+					# Returning a special function that will allow us to take a chunk at a time for rendering into each pixel.
+					# Hopefully, this should decrease memory use.
+					fn null, totalBytes, (chunkSize) =>
+						chunk = new Buffer(tmpFile.read(chunkSize or 3), 'utf8').toString('hex')
+						tbuffer = null
+						if chunk is null then return null
+						if chunk.length % 6 isnt 0
+							tBuffer = new Buffer chunk.length % 6
+							tBuffer.fill ' '
+							chunk = Buffer.concat [chunk, tBuffer]
+						return chunk
+					, tmpFile
+
+				if input.readable?
+					input.pipe(gzip).pipe(tmpFile)
+				else
+					gzip.pipe tmpFile
+					gzip.write new Buffer(input, 'utf8')
 		return null
 	write: (input, fn) ->
-		if @mode is encoder.modes.OVERWRITE
-			@__encode input, (err, totalBytes, chunkFn, tmpFile) =>
-				if err throw err
+		d = domain.create()
+		d.on 'error', (err) ->
+			# abort!
+			fn err
+		d.run () ->
+			if @mode is encoder.modes.OVERWRITE
+				@__encode input, (err, totalBytes, chunkFn, tmpFile) =>
+					if err then throw err
 
-				# take totalBytes, div by self.profile (as it contains the usable bytes per pixel).
-				pixels = Math.ceil(totalBytes / @profile)
-				@height = Math.ceil(pixels / @width)
-				@regionSize = @width * @height
-				if @regionSize < pixels
-					throw new Error 'insuffient region area to store provided data, need #{ pixels } pixels'
+					# take totalBytes, div by self.profile (as it contains the usable bytes per pixel).
+					pixels = Math.ceil(totalBytes / @profile)
+					@height = Math.ceil(pixels / @width)
+					@regionSize = @width * @height
+					if @regionSize < pixels
+						throw new Error 'insuffient region area to store provided data, need #{ pixels } pixels'
 
-				@regions.push({
-					x1: 0,
-					x2: self.width - 1,
-					y1: 0,
-					y2: self.height - 1,
-				})
-				@gdImage = gd.createTrueColor width, height
-				fn null, @__write(chunkFn, tmpFile)
-				# ^ totally deliberate
-		else if @mode is encoder.modes.EMBED
-			@__encode input, (err, totalBytes, chunkFn, tmpFile) =>
-				if err throw err
-
-				pixels = Math.ceil(totalBytes / @profile)
-				if @regionSize < pixels
-					throw new Error 'insuffient region area to store provided data, need #{ pixels } pixels'
-
-				gd.openPng @source, (err, gdImage) =>
-					if err throw err
-					@width = gdImage.width
-					@height = gdImage.height
-					@gdImage = gdImage
-
+					@regions.push({
+						x1: 0,
+						x2: self.width - 1,
+						y1: 0,
+						y2: self.height - 1,
+					})
+					@gdImage = gd.createTrueColor width, height
 					fn null, @__write(chunkFn, tmpFile)
-		else
-			# this should not be possible. should have been caught farther up in the stack.
-			throw new Error 'invalid encode mode specified'
+					# ^ totally deliberate
+			else if @mode is encoder.modes.EMBED
+				@__encode input, (err, totalBytes, chunkFn, tmpFile) =>
+					if err then throw err
+
+					pixels = Math.ceil(totalBytes / @profile)
+					if @regionSize < pixels
+						throw new Error 'insuffient region area to store provided data, need #{ pixels } pixels'
+
+					gd.openPng @source, (err, gdImage) =>
+						if err then throw err
+						@width = gdImage.width
+						@height = gdImage.height
+						@gdImage = gdImage
+
+						fn null, @__write(chunkFn, tmpFile)
+			else
+				# this should not be possible. should have been caught farther up in the stack.
+				throw new Error 'invalid encode mode specified'
+	__write: (chunkFn, tmpFile) ->
+		colors = {}
+		chunkSize = @profile
+		regionFn = (region) =>
+			x = y = r = g = b = hex = pixel = i = xor = null
+			if region.x1 > @gdImage.width or region.x2 > @gdImage.width or region.y1 > @gdImage.height pr region.y2 > @gdImage.height
+				throw new Error 'invalid region coordinates specified, not within actual image boundaries'
+
+
+			y = region.y1
+			while y <= region.y2
+				x = region.x1
+				while x <= region.x2
+					i = 0
+					hex = chunkFn chunkSize
+
+					if hex is null
+						hex = new Array(chunkSize + 1).join('FF')
+					if chunkSize isnt 3
+						pixel = @gdImage.getPixel x, y
+
+					if @profileBytes['R'] is encoder.bytes.OVERWRITE
+						r = parseInt hex.slice(i, i+2), 16
+						i+=2
+					else
+						r = @gdImage.red pixel
+						if @xorByte is 'R' then xor = r
+					if @profileBytes['G'] is encoder.bytes.OVERWRITE
+						r = parseInt hex.slice(i, i+2), 16
+						i+=2
+					else
+						r = @gdImage.green pixel
+						if @xorByte is 'G' then xor = g
+					if @profileBytes['B'] is encoder.bytes.OVERWRITE
+						r = parseInt hex.slice(i, i+2), 16
+						i+=2
+					else
+						r = @gdImage.blue pixel
+						if @xorByte is 'B' then xor = b
+
+					if @profileBytes['R'] is encoder.bytes.WRITEXOR then r = r ^ xor
+					if @profileBytes['G'] is encoder.bytes.WRITEXOR then g = g ^ xor
+					if @profileBytes['B'] is encoder.bytes.WRITEXOR then b = b ^ xor
+
+					hex = hexNum(r) + hexNum(g) + hexNum(b)
+
+					# cache color allocation
+					if !colors[hex]?
+						colors[hex] = @gdImage.colorAllocate r, g, b
+					@gdImage.setPixel x, y, colors[hex]
+					x++
+				y++
+
+			regionFn region for region in @regions
+
+			@gdImage.savePng @dest, 0, gd.noop
+			fs.unlinkSync @tmpFile
+
+		return dest
 	@modes: {
 		# overwriting all image data
 		OVERWRITE: 1
@@ -205,6 +273,18 @@ class encoder extends EventEmitter
 		GORGE: 3
 	}
 
+class decoder extends EventEmitter
+	constructor: (options) ->
+		# todo
+	__decode: (fn) ->
+		#todo
+	read: (fn) ->
+	__read: (fn) ->
+
 Object.freeze encoder.mode
 Object.freeze encoder.profiles
 Object.freeze encoder.bytes
+
+module.exports = blip =
+	encoder: encoder
+	decoder: decoder
